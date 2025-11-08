@@ -25,7 +25,7 @@ This term project implements the Isolation Forest anomaly detection algorithm fr
 
 Description: The original Vertebral Column dataset from the UCI Machine Learning Repository is a biomedical dataset created by Dr. Henrique da Mota (Group of Applied Research in Orthopaedics, Centre Médico-Chirurgical de Réadaptation des Massues, Lyon, France). Each instance (patient) is represented by six biomechanical attributes derived from the shape and orientation of the pelvis and lumbar spine (in this order): pelvic incidence, pelvic tilt, lumbar lordosis angle, sacral slope, pelvic radius, and grade of spondylolisthesis. The dataset convention uses two class labels: Normal (`NO`) and Abnormal (`AB`). For our anomaly detection experiments, `AB` is treated as the majority class (inliers) with 210 instances, while `NO` is downsampled from 100 to 30 instances and treated as outliers.
 
-## Implementation Specifications
+## Implementation Specs
 
 - Inputs:
 	- A numeric 2D array X of shape (n_samples, n_features).
