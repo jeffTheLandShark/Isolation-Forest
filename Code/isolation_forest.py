@@ -85,7 +85,10 @@ class IsolationTree:
         Returns:
             subsample (array): The subsampled data.
         """
-        return np.random.choice(X, size=self.max_samples, replace=False)
+        if X.shape[0] <= self.max_samples:
+            return X
+        idx = np.random.choice(X.shape[0], size=self.max_samples, replace=False)
+        return X[idx]
 
     def _fit_node(self, X, current_height: int, max_height: int) -> Node:
         """
