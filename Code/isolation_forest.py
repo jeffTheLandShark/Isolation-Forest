@@ -67,6 +67,13 @@ class IsolationTree:
         self.max_features = max_features
         self.max_height = max_height
         self.random_state = random_state
+        self._set_random_state()
+
+    def _set_random_state(self):
+        if isinstance(self.random_state, int):
+            np.random.seed(self.random_state)
+        elif isinstance(self.random_state, RandomState):
+            np.random.set_state(self.random_state.get_state())
 
     def _subsample(self, X) -> np.ndarray:
         """
@@ -286,12 +293,12 @@ class IsolationForest:
         self.fit(X, sample_weight=sample_weight)
         return self.predict(X)
 
-    def _make_estimator(self, random_state=None) -> IsolationTree:
+    def _make_estimator(self) -> IsolationTree:
         """
         Helper method to create a single Isolation Tree (base estimator).
         """
         return IsolationTree(
             max_samples=self.max_samples,
             max_features=self.max_features,
-            random_state=random_state,
+            random_state=self.random_state,
         )
