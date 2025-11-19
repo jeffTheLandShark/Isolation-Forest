@@ -27,9 +27,7 @@ def make_ndim_synthetic_data(
 
 def test_fit_predict_shape_and_values(X, y):
     """Tests that fit_predict returns correct shape and values."""
-    clf = IsolationForest(
-        n_estimators=50, max_samples=64, max_features=2, random_state=42
-    )
+    clf = IsolationForest(n_trees=50, max_samples=64, max_features=2, random_state=42)
     clf.fit(X)
 
     preds = clf.predict(X)
@@ -37,14 +35,12 @@ def test_fit_predict_shape_and_values(X, y):
     assert preds.shape == (X.shape[0],)
     # predictions should be either -1 (outlier) or 1 (inlier)
     unique = np.unique(preds)
-    assert set(unique).issubset({-1, 1})
+    assert set(unique).issubset({0, 1})
 
 
 def test_decision_function_separates_outliers(X, y):
     """Tests that decision_function gives higher scores to outliers."""
-    clf = IsolationForest(
-        n_estimators=100, max_samples=128, max_features=2, random_state=0
-    )
+    clf = IsolationForest(n_trees=100, max_samples=128, max_features=2, random_state=0)
     clf.fit(X)
 
     scores = clf.decision_function(X)
@@ -63,9 +59,7 @@ def test_decision_function_separates_outliers(X, y):
 def test_ndim_decision_function_separates_outliers():
     """Tests that decision_function gives higher scores to outliers in n-dimensions."""
     X, y = make_ndim_synthetic_data(n_features=5)
-    clf = IsolationForest(
-        n_estimators=100, max_samples=128, max_features=5, random_state=0
-    )
+    clf = IsolationForest(n_trees=100, max_samples=128, max_features=5, random_state=0)
     clf.fit(X)
 
     scores = clf.decision_function(X)
@@ -83,8 +77,8 @@ def test_ndim_decision_function_separates_outliers():
 
 def test_deterministic_with_random_state(X, y):
     """Tests that using the same random_state yields the same results."""
-    clf1 = IsolationForest(n_estimators=50, random_state=0)
-    clf2 = IsolationForest(n_estimators=50, random_state=0)
+    clf1 = IsolationForest(n_trees=50, random_state=0)
+    clf2 = IsolationForest(n_trees=50, random_state=0)
 
     clf1.fit(X)
     clf2.fit(X)
@@ -96,7 +90,7 @@ def test_deterministic_with_random_state(X, y):
 
 def test_fit_predict_helper(X, y):
     """Tests the fit_predict convenience method."""
-    clf = IsolationForest(n_estimators=20, random_state=1)
+    clf = IsolationForest(n_trees=20, random_state=1)
     preds = clf.fit_predict(X)
     assert isinstance(preds, np.ndarray)
     assert preds.shape == (X.shape[0],)

@@ -171,7 +171,7 @@ class IsolationTree:
 class IsolationForest:
     def __init__(
         self,
-        n_estimators: int = 100,
+        n_trees: int = 100,
         max_samples: int | str = "auto",
         contamination: float | str = "auto",
         max_features: int = 1,
@@ -184,7 +184,7 @@ class IsolationForest:
         Initializes the IsolationForest model.
 
         Args:
-            n_estimators (int): The number of base estimators (isolation trees) in the ensemble.
+            n_trees (int): The number of base trees in the ensemble.
             max_samples (int or 'auto'): The number of samples to draw from X to train each base estimator.
             contamination (float or 'auto'): The amount of contamination (proportion of outliers in the data set).
             max_features (int): The number of features to draw from X to train each base estimator.
@@ -194,7 +194,7 @@ class IsolationForest:
             warm_start (bool): When set to True, reuse the solution of the previous call to fit and add more estimators to the ensemble.
         """
         # Initialize attributes based on parameters
-        self.n_estimators: int = n_estimators
+        self.n_trees: int = n_trees
         self.max_samples: int = (
             max_samples
             if isinstance(max_samples, int)
@@ -232,13 +232,11 @@ class IsolationForest:
 
         """
         if not self.warm_start or not self.estimators_:
-            self.estimators_ = [
-                self._make_estimator() for _ in range(self.n_estimators)
-            ]
+            self.estimators_ = [self._make_estimator() for _ in range(self.n_trees)]
             for estimator in self.estimators_:
                 estimator.fit(X, sample_weight=sample_weight)
         else:
-            new_estimators = [self._make_estimator() for _ in range(self.n_estimators)]
+            new_estimators = [self._make_estimator() for _ in range(self.n_trees)]
             for estimator in new_estimators:
                 estimator.fit(X, sample_weight=sample_weight)
             self.estimators_.extend(new_estimators)
@@ -276,11 +274,11 @@ class IsolationForest:
             X (array-like): The input samples.
 
         Returns:
-            predictions (array): Array of -1 for outliers and 1 for inliers.
+            predictions (array): Array of 1 for outliers and 0 for inliers.
         """
         scores = self.decision_function(X)
         threshold = np.percentile(scores, 100 * self.contamination)
-        return np.where(scores >= threshold, -1, 1)
+        return np.where(scores >= threshold, 0, 1)
 
     def fit_predict(self, X, sample_weight=None) -> np.ndarray:
         """
@@ -291,7 +289,7 @@ class IsolationForest:
             sample_weight (array-like, optional): Individual weights for each sample.
 
         Returns:
-            predictions (array): Array of -1 for outliers and 1 for inliers.
+            predictions (array): Array of 1 for outliers and 0 for inliers.
         """
         self.fit(X, sample_weight=sample_weight)
         return self.predict(X)
