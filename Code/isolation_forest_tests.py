@@ -13,6 +13,18 @@ def make_synthetic_data(n_inliers=200, n_outliers=20, random_state=0):
     return X, y
 
 
+def make_ndim_synthetic_data(
+    n_inliers=200, n_outliers=20, n_features=5, random_state=0
+):
+    """Generates synthetic data with inliers and outliers for testing in n-dimensions."""
+    rng = np.random.RandomState(random_state)
+    inliers = rng.normal(loc=0.0, scale=0.5, size=(n_inliers, n_features))
+    outliers = rng.uniform(low=6.0, high=8.0, size=(n_outliers, n_features))
+    X = np.vstack([inliers, outliers])
+    y = np.hstack([np.zeros(n_inliers, dtype=int), np.ones(n_outliers, dtype=int)])
+    return X, y
+
+
 def test_fit_predict_shape_and_values(X, y):
     """Tests that fit_predict returns correct shape and values."""
     clf = IsolationForest(
@@ -32,6 +44,27 @@ def test_decision_function_separates_outliers(X, y):
     """Tests that decision_function gives higher scores to outliers."""
     clf = IsolationForest(
         n_estimators=100, max_samples=128, max_features=2, random_state=0
+    )
+    clf.fit(X)
+
+    scores = clf.decision_function(X)
+    assert isinstance(scores, np.ndarray)
+    assert scores.shape == (X.shape[0],)
+    # scores should be finite numbers
+    assert np.all(np.isfinite(scores))
+
+    inlier_scores = scores[y == 0]
+    outlier_scores = scores[y == 1]
+
+    # On average, true outliers should have a different (typically higher) anomaly score
+    assert outlier_scores.mean() != inlier_scores.mean()
+
+
+def test_ndim_decision_function_separates_outliers():
+    """Tests that decision_function gives higher scores to outliers in n-dimensions."""
+    X, y = make_ndim_synthetic_data(n_features=5)
+    clf = IsolationForest(
+        n_estimators=100, max_samples=128, max_features=5, random_state=0
     )
     clf.fit(X)
 
@@ -88,6 +121,8 @@ if __name__ == "__main__":
     test_fit_predict_shape_and_values(X, y)
     print("Testing decision_function_separates_outliers...")
     test_decision_function_separates_outliers(X, y)
+    print("Testing ndim_decision_function_separates_outliers...")
+    test_ndim_decision_function_separates_outliers()
     print("Testing deterministic_with_random_state...")
     test_deterministic_with_random_state(X, y)
     print("Testing fit_predict_helper...")
