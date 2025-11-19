@@ -157,6 +157,7 @@ class IsolationTree:
         """
         return np.array([self.trace_path(x) for x in X])
 
+
 class IsolationForest:
     def __init__(
         self,
@@ -211,17 +212,39 @@ class IsolationForest:
         """
         return 256
 
-    def fit(self, X, y=None, sample_weight=None) -> None:
+    def fit(self, X, sample_weight=None):
         """
         Fits the IsolationForest model to the training data.
 
         Args:
             X (array-like): The input samples.
-            y (array-like, optional): Ignored. Not used in unsupervised learning.
             sample_weight (array-like, optional): Individual weights for each sample.
 
         """
-        return None
+        if not self.warm_start or not self.estimators_:
+            self.estimators_ = [
+                self._make_estimator() for _ in range(self.n_estimators)
+            ]
+            for estimator in self.estimators_:
+                estimator.fit(X, sample_weight=sample_weight)
+        else:
+            new_estimators = [self._make_estimator() for _ in range(self.n_estimators)]
+            for estimator in new_estimators:
+                estimator.fit(X, sample_weight=sample_weight)
+            self.estimators_.extend(new_estimators)
+
+    def _anomaly_score(self, x: np.ndarray) -> float:
+        """
+        Computes the anomaly score for a single sample x.
+
+        Args:
+            x (array-like): The input sample.
+        Returns:
+            score (float): The anomaly score for the sample x.
+        """
+        return float(
+            np.mean([estimator.trace_path(x) for estimator in self.estimators_])
+        )
 
     def decision_function(self, X) -> np.ndarray:
         """
@@ -233,7 +256,7 @@ class IsolationForest:
         Returns:
             scores (array): The anomaly scores for each sample.
         """
-        return np.array([])
+        return np.array([self._anomaly_score(x) for x in X])
 
     def predict(self, X) -> np.ndarray:
         """
@@ -245,7 +268,9 @@ class IsolationForest:
         Returns:
             predictions (array): Array of -1 for outliers and 1 for inliers.
         """
-        return np.array([])
+        scores = self.decision_function(X)
+        threshold = np.percentile(scores, 100 * self.contamination)
+        return np.where(scores >= threshold, -1, 1)
 
     def fit_predict(self, X, sample_weight=None) -> np.ndarray:
         """
