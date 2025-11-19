@@ -2,12 +2,58 @@ from numpy.random import RandomState
 import numpy as np
 
 
+class Node:
+    def __init__(
+        self,
+        feature: int,
+        split_value: float,
+        left: "Node | None" = None,
+        right: "Node | None" = None,
+        size: int = 0,
+    ):
+        """
+        Initializes a Node in the Isolation Tree.
+        Args:
+            feature (int): The feature index used for splitting.
+            split_value (float): The value used for splitting the feature.
+            left (Node): The left child node.
+            right (Node): The right child node.
+            size (int): The number of samples in the node.
+        """
+        self.feature: int = feature
+        self.split_value: float = split_value
+        self.left: Node | None = left
+        self.right: Node | None = right
+        self.size: int = size
+
+    def __repr__(self):
+        return f"Node(feature={self.feature}, split_value={self.split_value}, size={self.size})"
+
+    def is_leaf(self):
+        return self.left is None and self.right is None
+
+    def partition(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Partitions the data X based on the node's feature and split value.
+
+        Args:
+            X (array-like): The input samples.
+        Returns:
+            left_partition (array): Samples that go to the left child.
+            right_partition (array): Samples that go to the right child.
+        """
+        left_partition = X[X[:, self.feature] < self.split_value]
+        right_partition = X[X[:, self.feature] >= self.split_value]
+        return left_partition, right_partition
+
+
 class IsolationTree:
     def __init__(
         self,
         max_samples: int,
         max_features: int,
         random_state: int | RandomState | None = None,
+        max_height: int = 10,
     ):
         """
         Initializes the IsolationTree.
@@ -19,7 +65,44 @@ class IsolationTree:
         """
         self.max_samples = max_samples
         self.max_features = max_features
+        self.max_height = max_height
         self.random_state = random_state
+
+    def _subsample(self, X) -> np.ndarray:
+        """
+        Subsamples the input data X.
+
+        Args:
+            X (array-like): The input samples.
+
+        Returns:
+            subsample (array): The subsampled data.
+        """
+        return np.random.choice(X, size=self.max_samples, replace=False)
+
+    def _fit_node(self, X, current_height: int, max_height: int) -> Node:
+        """
+        Recursively fits a node in the IsolationTree.
+
+        Args:
+            X (array-like): The input samples.
+            current_height (int): The current height of the node.
+            max_height (int): The maximum height of the tree.
+
+        """
+        if (current_height >= max_height) or (X.shape[0] <= 1) or np.all(X == X[0]):
+            return Node(feature=-1, split_value=-1, size=X.shape[0])
+        # random feature selection
+        feature = np.random.choice(self.max_features)
+        # random split value selection
+        split_value = np.random.uniform(np.min(X[:, feature]), np.max(X[:, feature]))
+        node = Node(feature=feature, split_value=split_value, size=X.shape[0])
+        # data partitioning
+        left_partition, right_partition = node.partition(X)
+        # recursion
+        node.left = self._fit_node(left_partition, current_height + 1, max_height)
+        node.right = self._fit_node(right_partition, current_height + 1, max_height)
+        return node
 
     def fit(self, X, sample_weight=None) -> None:
         """
@@ -30,7 +113,37 @@ class IsolationTree:
             sample_weight (array-like, optional): Individual weights for each sample.
 
         """
+        # create root node w/ subsample
+        self.sample = self._subsample(X)
+        self.root_ = self._fit_node(
+            self.sample, current_height=0, max_height=self.max_height
+        )
         return None
+
+    def trace_path(
+        self, x: np.ndarray, node: Node | None = None, current_height: int = 0
+    ) -> int:
+        """
+        Traces the path length of a single sample x through the tree.
+
+        Args:
+            x (array-like): The input sample.
+            node (Node, optional): The current node in the tree.
+            current_height (int): The current height in the tree.
+
+        Returns:
+            path_length (int): The path length for the sample x.
+        """
+        if node is None:
+            if self.root_ is None:
+                raise ValueError("The tree has not been fitted yet.")
+            node = self.root_
+        if node.is_leaf():
+            return current_height
+        if x[node.feature] < node.split_value:
+            return self.trace_path(x, node.left, current_height + 1)
+        else:
+            return self.trace_path(x, node.right, current_height + 1)
 
     def path_length(self, X) -> np.ndarray:
         """
@@ -42,8 +155,7 @@ class IsolationTree:
         Returns:
             path_lengths (array): The path lengths for each sample.
         """
-        return np.array([])
-
+        return np.array([self.trace_path(x) for x in X])
 
 class IsolationForest:
     def __init__(
