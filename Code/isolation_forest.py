@@ -50,7 +50,6 @@ class Node:
 class IsolationTree:
     def __init__(
         self,
-        max_samples: int,
         max_features: int,
         random_state: int | RandomState | None = None,
         max_height: int = 10,
@@ -63,7 +62,6 @@ class IsolationTree:
             max_features (int): The number of features to draw from X to train the tree.
             random_state (int or RandomState instance): Controls the randomness of the estimator.
         """
-        self.max_samples = max_samples
         self.max_features = max_features
         self.max_height = max_height
         self.random_state = random_state
@@ -74,21 +72,6 @@ class IsolationTree:
             np.random.seed(self.random_state)
         elif isinstance(self.random_state, RandomState):
             np.random.set_state(self.random_state.get_state())
-
-    def _subsample(self, X) -> np.ndarray:
-        """
-        Subsamples the input data X.
-
-        Args:
-            X (array-like): The input samples.
-
-        Returns:
-            subsample (array): The subsampled data.
-        """
-        if X.shape[0] <= self.max_samples:
-            return X
-        idx = np.random.choice(X.shape[0], size=self.max_samples, replace=False)
-        return X[idx]
 
     def _fit_node(self, X, current_height: int, max_height: int) -> Node:
         """
@@ -103,10 +86,10 @@ class IsolationTree:
         if (current_height >= max_height) or (X.shape[0] <= 1) or np.all(X == X[0]):
             return Node(feature=-1, split_value=-1, size=X.shape[0])
         # random feature selection
-        feature = np.random.choice(self.max_features)
-        # random split value selection
-        split_value = np.random.uniform(np.min(X[:, feature]), np.max(X[:, feature]))
-        node = Node(feature=feature, split_value=split_value, size=X.shape[0])
+        rand_feature = np.random.choice(self.max_features)
+        feature = X[:, rand_feature]
+        split_value = np.random.uniform(np.min(feature), np.max(feature))
+        node = Node(feature=rand_feature, split_value=split_value, size=X.shape[0])
         # data partitioning
         left_partition, right_partition = node.partition(X)
         # recursion
@@ -124,10 +107,7 @@ class IsolationTree:
 
         """
         # create root node w/ subsample
-        self.sample = self._subsample(X)
-        self.root_ = self._fit_node(
-            self.sample, current_height=0, max_height=self.max_height
-        )
+        self.root_ = self._fit_node(X, current_height=0, max_height=self.max_height)
         return None
 
     def trace_path(
@@ -172,10 +152,7 @@ class IsolationForest:
     def __init__(
         self,
         n_trees: int = 100,
-        max_samples: int | str = "auto",
         contamination: float | str = "auto",
-        max_features: int = 1,
-        bootstrap: bool = False,
         random_state: int | RandomState | None = None,
         verbose: bool = False,
         warm_start: bool = False,
@@ -185,25 +162,19 @@ class IsolationForest:
 
         Args:
             n_trees (int): The number of base trees in the ensemble.
-            max_samples (int or 'auto'): The number of samples to draw from X to train each base estimator.
             contamination (float or 'auto'): The amount of contamination (proportion of outliers in the data set).
             max_features (int): The number of features to draw from X to train each base estimator.
-            bootstrap (bool): Whether bootstrap samples are used when building trees.
             random_state (int or RandomState instance): Controls the randomness of the estimator.
             verbose (bool): Enable verbose output.
             warm_start (bool): When set to True, reuse the solution of the previous call to fit and add more estimators to the ensemble.
         """
         # Initialize attributes based on parameters
         self.n_trees: int = n_trees
-        self.max_samples: int = (
-            max_samples
-            if isinstance(max_samples, int)
-            else self._determine_max_samples()
-        )
+
         self.contamination: float = (
             contamination if isinstance(contamination, float) else 0.1
         )
-        self.max_features: int = max_features
+        self.num_features: int | None = None  # to be set during fit
         self.bootstrap: bool = bootstrap
         self.random_state: int | RandomState = (
             random_state if random_state is not None else RandomState()
@@ -211,16 +182,6 @@ class IsolationForest:
         self.verbose: bool = verbose
         self.warm_start: bool = warm_start
         self.estimators_: list[IsolationTree] = []
-
-    def _determine_max_samples(self) -> int:
-        """
-        Determines the maximum number of samples to draw from X
-        based on the dataset size.
-
-        Returns:
-            max_samples (int): The determined maximum number of samples.
-        """
-        return 256
 
     def fit(self, X, sample_weight=None):
         """
@@ -231,6 +192,7 @@ class IsolationForest:
             sample_weight (array-like, optional): Individual weights for each sample.
 
         """
+        self.num_features = X.shape[1]
         if not self.warm_start or not self.estimators_:
             self.estimators_ = [self._make_estimator() for _ in range(self.n_trees)]
             for estimator in self.estimators_:
@@ -298,8 +260,9 @@ class IsolationForest:
         """
         Helper method to create a single Isolation Tree (base estimator).
         """
+        if self.num_features is None:
+            raise ValueError("num_features must be set before creating an estimator.")
         return IsolationTree(
-            max_samples=self.max_samples,
-            max_features=self.max_features,
+            max_features=self.num_features,
             random_state=self.random_state,
         )
