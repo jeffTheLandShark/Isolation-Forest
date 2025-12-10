@@ -29,7 +29,7 @@ class Node:
     def __repr__(self):
         return f"Node(feature={self.feature}, split_value={self.split_value}, size={self.size})"
 
-    def is_leaf(self):
+    def is_leaf(self) -> bool:
         return self.left is None and self.right is None
 
     def partition(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -39,12 +39,17 @@ class Node:
         Args:
             X (array-like): The input samples.
         Returns:
-            left_partition (array): Samples that go to the left child.
-            right_partition (array): Samples that go to the right child.
+            left_partition, right_partition (tuple): The left and right partitions of X.
+        Raises:
+            ValueError: If the feature index is invalid.
         """
-        left_partition = X[X[:, self.feature] < self.split_value]
-        right_partition = X[X[:, self.feature] >= self.split_value]
-        return left_partition, right_partition
+        if X.size == 0:
+            return X, X  # empty partitions
+        if self.feature < 0 or self.feature >= X.shape[1]:
+            # if feature is invalid, don't split
+            raise ValueError("Invalid feature index for partitioning")
+        left_part = X[:, self.feature] < self.split_value  # bool mask
+        return X[left_part], X[~left_part]
 
 
 class IsolationTree:
