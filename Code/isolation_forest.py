@@ -54,28 +54,26 @@ class Node:
 
 class IsolationTree:
     def __init__(
-        self,
-        max_samples: int = 256,
-        random_state: int | RandomState | None = None,
+        self, max_samples: int = 256, random_state: Optional[int | RandomState] = None
     ):
         """
         Initializes the IsolationTree.
-
         Args:
-            random_state (int or RandomState instance): Controls the randomness of the estimator.
+            max_samples (int): The maximum number of samples to use for building the tree.
+            random_state (int | RandomState | None): Seed or RandomState
         """
-        self.max_samples = max_samples
-        self.random_state = random_state
-        self.max_height = int(np.ceil(np.log2(self.max_samples)))
-        self._num_features: int | None = None
+        if max_samples <= 0:
+            raise ValueError("max_samples must be > 0")
+        self.max_samples: int = max_samples
+        self.max_height: int = int(np.ceil(np.log2(self.max_samples)))
+        # internal RNG: always a RandomState instance
+        if isinstance(random_state, RandomState):
+            self._rng = RandomState(random_state.randint(0, 2**31 - 1))
+        else:
+            self._rng = RandomState(random_state)
         self._root: Node | None = None
-        self._set_random_state()
-
-    def _set_random_state(self):
-        if isinstance(self.random_state, int):
-            np.random.seed(self.random_state)
-        elif isinstance(self.random_state, RandomState):
-            np.random.set_state(self.random_state.get_state())
+        self._num_features: Optional[int] = None
+        self.n_samples: Optional[int] = None
 
     def _fit_node(self, X, current_height: int) -> Node:
         """
