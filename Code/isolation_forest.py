@@ -18,8 +18,8 @@ def c_(n: int) -> float:
 class Node:
     def __init__(
         self,
-        feature: int,
-        split_value: float,
+        feature: int = -1,
+        split_value: float = 0.0,
         left: "Node | None" = None,
         right: "Node | None" = None,
         size: int = 0,
