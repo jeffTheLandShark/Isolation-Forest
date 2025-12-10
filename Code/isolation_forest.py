@@ -312,29 +312,27 @@ class IsolationForest:
             return 0.0
         return 2.0 * (np.log(n - 1) + 0.5772156649) - 2.0 * (n - 1) / n
 
-    def _anomaly_score(self, x: np.ndarray) -> float:
-        """
-        Computes the normalized anomaly score for a single sample x.
+    def _anomaly_score(self, X: np.ndarray) -> np.ndarray:
+        """Computes the anomaly score for each sample in X.
 
         The formula is: s(x, n) = 2^(-E(h(x)) / c(n))
         where E(h(x)) is the average path length and c(n) is the normalization constant.
 
         Args:
-            x (array-like): The input sample.
+            X (array-like): The input samples.
         Returns:
-            score (float): The normalized anomaly score for the sample x.
+            score (array): The anomaly scores for each sample.
         """
-        if not self.estimators_ or self._n_samples is None:
-            raise ValueError("The model has not been fitted yet.")
-        # Get average path length across all trees
-        avg_path_length = float(
-            np.mean([estimator.trace_path(x) for estimator in self.estimators_])
+        if not self._estimators or self._n_samples is None:
+            raise ValueError("Model not fitted")
+        # Average path length per sample across trees
+        avg_paths = np.array(
+            [np.mean([tree.trace_path(x) for tree in self._estimators]) for x in X]
         )
-        # Normalize by c(n) and apply exponential formula
-        c_n = self._c(self._n_samples)
+        c_n = c_(self._n_samples)
         if c_n == 0:
-            return 0.0
-        return 2.0 ** (-(avg_path_length / c_n))
+            c_n = EPSILON
+        return 2.0 ** (-(avg_paths / c_n))
 
     def decision_function(self, X) -> np.ndarray:
         """
