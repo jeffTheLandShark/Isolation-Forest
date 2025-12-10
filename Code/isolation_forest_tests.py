@@ -27,7 +27,7 @@ def make_ndim_synthetic_data(
 
 def test_fit_predict_shape_and_values(X, y):
     """Tests that fit_predict returns correct shape and values."""
-    clf = IsolationForest(n_trees=50, max_samples=64, max_features=2, random_state=42)
+    clf = IsolationForest(n_trees=50, random_state=42)
     clf.fit(X)
 
     preds = clf.predict(X)
@@ -40,7 +40,7 @@ def test_fit_predict_shape_and_values(X, y):
 
 def test_decision_function_separates_outliers(X, y):
     """Tests that decision_function gives higher scores to outliers."""
-    clf = IsolationForest(n_trees=100, max_samples=128, max_features=2, random_state=0)
+    clf = IsolationForest(n_trees=100, random_state=0)
     clf.fit(X)
 
     scores = clf.decision_function(X)
@@ -59,7 +59,7 @@ def test_decision_function_separates_outliers(X, y):
 def test_ndim_decision_function_separates_outliers():
     """Tests that decision_function gives higher scores to outliers in n-dimensions."""
     X, y = make_ndim_synthetic_data(n_features=5)
-    clf = IsolationForest(n_trees=100, max_samples=128, max_features=5, random_state=0)
+    clf = IsolationForest(n_trees=100, random_state=0)
     clf.fit(X)
 
     scores = clf.decision_function(X)
