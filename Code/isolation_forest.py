@@ -75,7 +75,7 @@ class IsolationTree:
         self._num_features: Optional[int] = None
         self.n_samples: Optional[int] = None
 
-    def _fit_node(self, X, current_height: int) -> Node:
+    def _fit_node(self, X: np.ndarray, current_height: int) -> Node:
         """
         Recursively fits a node in the IsolationTree.
 
@@ -86,23 +86,22 @@ class IsolationTree:
 
         """
         if self._num_features is None:
-            raise ValueError("Something went wrong. _num_features is not set.")
-        if (
-            (current_height >= self.max_height)
-            or (X.shape[0] <= 1)
-            or np.all(X == X[0])
-        ):
-            return Node(feature=-1, split_value=-1, size=X.shape[0])
+            raise ValueError("_num_features must be set before building nodes")
+        n = X.shape[0]
+        if (current_height >= self.max_height) or (n <= 1) or np.all(X == X[0]):
+            return Node(size=n)
         # random feature selection
-        rand_feature = np.random.choice(self._num_features)
-        feature = X[:, rand_feature]
-        split_value = np.random.uniform(np.min(feature), np.max(feature))
-        node = Node(feature=rand_feature, split_value=split_value, size=X.shape[0])
-        # data partitioning
-        left_partition, right_partition = node.partition(X)
+        rand_feature = int(self._rng.choice(self._num_features))
+        feature_vals = X[:, rand_feature]
+        if np.all(np.isclose(feature_vals, feature_vals[0], atol=EPSILON)):
+            # all values are (approximately) the same -> no split possible
+            return Node(feature=rand_feature, split_value=feature_vals[0], size=n)
+        split_val = float(self._rng.uniform(np.min(feature_vals), np.max(feature_vals)))
+        node = Node(feature=rand_feature, split_value=split_val, size=n)
+        left_X, right_X = node.partition(X)
         # recursion
-        node.left = self._fit_node(left_partition, current_height + 1)
-        node.right = self._fit_node(right_partition, current_height + 1)
+        node.left = self._fit_node(left_X, current_height + 1)
+        node.right = self._fit_node(right_X, current_height + 1)
         return node
 
     def feature_importances_(self) -> np.ndarray:
