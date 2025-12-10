@@ -97,6 +97,42 @@ class IsolationTree:
         node.right = self._fit_node(right_partition, current_height + 1, max_height)
         return node
 
+    def feature_importances_(self) -> np.ndarray:
+        """
+        Computes feature importances based on the path lengths in the tree.
+
+        Returns:
+            feature_importances (array): The importance of each feature.
+        """
+        if self.root_ is None:
+            raise ValueError("The tree has not been fitted yet.")
+        importances = np.zeros(self.max_features)
+        node_counts = np.zeros(self.max_features)
+        self._accumulate_feature_importances(self.root_, importances, node_counts)
+        # Normalize importances
+        importances /= np.sum(node_counts)
+        return importances
+
+    def _accumulate_feature_importances(
+        self, node: Node, importances: np.ndarray, node_counts: np.ndarray
+    ) -> None:
+        """
+        Helper method to accumulate feature importances from a single tree.
+
+        Args:
+            node (Node): The current node in the tree.
+            importances (array): The array to accumulate importances.
+            node_counts (array): The array to count occurrences of features.
+        """
+        if node.is_leaf() or (node.left is None or node.right is None):
+            return
+        # mini = max(1, min(node.left.size, node.right.size))
+        mini = 1
+        importances[node.feature] += 1 / mini
+        node_counts[node.feature] += 1
+        self._accumulate_feature_importances(node.left, importances, node_counts)
+        self._accumulate_feature_importances(node.right, importances, node_counts)
+
     def fit(self, X, sample_weight=None) -> None:
         """
         Fits the IsolationTree to the training data.
@@ -182,6 +218,38 @@ class IsolationForest:
         self.verbose: bool = verbose
         self.warm_start: bool = warm_start
         self.estimators_: list[IsolationTree] = []
+
+    def shortcut_feature_importances_(self, X: np.ndarray) -> np.ndarray:
+        """
+        Computes feature importances based on the average path lengths across all trees.
+
+        Returns:
+            feature_importances (array): The importance of each feature.
+        """
+        if not self.estimators_ or self.num_features is None:
+            raise ValueError("The model has not been fitted yet.")
+        importances = np.zeros(self.num_features)
+        for estimator in self.estimators_:
+            importances += (
+                estimator.feature_importances_() / estimator.path_length(X).mean()
+            )
+        importances /= len(self.estimators_)
+        return importances
+
+    def feature_importances_(self) -> np.ndarray:
+        """
+        Computes feature importances based on the average path lengths across all trees.
+
+        Returns:
+            feature_importances (array): The importance of each feature.
+        """
+        if not self.estimators_ or self.num_features is None:
+            raise ValueError("The model has not been fitted yet.")
+        importances = np.zeros(self.num_features)
+        for estimator in self.estimators_:
+            importances += estimator.feature_importances_()
+        importances /= len(self.estimators_)
+        return importances
 
     def fit(self, X, sample_weight=None):
         """
