@@ -91,7 +91,7 @@ class IsolationForestComparison:
 
         # Custom implementation
         start = time.time()
-        custom_scores = self.custom_model._anomaly_score(self.X_test)
+        custom_scores = self.custom_model.decision_function(self.X_test)
         custom_time = time.time() - start
 
         # Scikit-learn implementation
