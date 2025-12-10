@@ -51,7 +51,7 @@ class IsolationTree:
     def __init__(
         self,
         max_features: int,
-        n_samples: int,
+        max_samples: int = 256,
         random_state: int | RandomState | None = None,
     ):
         """
@@ -62,8 +62,8 @@ class IsolationTree:
             random_state (int or RandomState instance): Controls the randomness of the estimator.
         """
         self.max_features = max_features
-        self.n_samples = n_samples
-        self.max_height = int(np.ceil(np.log2(self.n_samples)))
+        self.max_samples = max_samples
+        self.max_height = int(np.ceil(np.log2(self.max_samples)))
         self.random_state = random_state
         self.root_: Node | None = None
         self._set_random_state()
@@ -138,7 +138,7 @@ class IsolationTree:
         self._accumulate_feature_importances(node.left, importances, node_counts)
         self._accumulate_feature_importances(node.right, importances, node_counts)
 
-    def fit(self, X, sample_weight=None) -> None:
+    def fit(self, X) -> None:
         """
         Fits the IsolationTree to the training data.
 
@@ -148,6 +148,9 @@ class IsolationTree:
 
         """
         # create root node w/ subsample
+        subsample = np.random.choice(X.shape[0], self.max_samples, replace=False)
+        X = X[subsample]
+        self.n_samples = X.shape[0]
         self.root_ = self._fit_node(X, current_height=0)
         return None
 
@@ -194,6 +197,7 @@ class IsolationForest:
         self,
         n_trees: int = 100,
         contamination: float | str = "auto",
+        max_samples: int = 512,
         random_state: int | RandomState | None = None,
         verbose: bool = False,
         warm_start: bool = False,
@@ -215,6 +219,7 @@ class IsolationForest:
         self.contamination: float = (
             contamination if isinstance(contamination, float) else 0.1
         )
+        self.max_samples: int = max_samples
         self.num_features: int | None = None  # to be set during fit
         self.n_samples_: int | None = None  # to be set during fit
         self.random_state: int | RandomState = (
@@ -239,7 +244,7 @@ class IsolationForest:
         importances /= len(self.estimators_)
         return importances
 
-    def fit(self, X, sample_weight=None):
+    def fit(self, X):
         """
         Fits the IsolationForest model to the training data.
 
@@ -253,11 +258,11 @@ class IsolationForest:
         if not self.warm_start or not self.estimators_:
             self.estimators_ = [self._make_estimator() for _ in range(self.n_trees)]
             for estimator in self.estimators_:
-                estimator.fit(X, sample_weight=sample_weight)
+                estimator.fit(X)
         else:
             new_estimators = [self._make_estimator() for _ in range(self.n_trees)]
             for estimator in new_estimators:
-                estimator.fit(X, sample_weight=sample_weight)
+                estimator.fit(X)
             self.estimators_.extend(new_estimators)
 
     def _c(self, n: int) -> float:
@@ -326,7 +331,7 @@ class IsolationForest:
         threshold = np.percentile(scores, (100 * (1 - self.contamination)))
         return np.where(scores >= threshold, 1, 0)
 
-    def fit_predict(self, X, sample_weight=None) -> np.ndarray:
+    def fit_predict(self, X) -> np.ndarray:
         """
         Fits the model to the training data and returns the predictions.
 
@@ -337,7 +342,7 @@ class IsolationForest:
         Returns:
             predictions (array): Array of 1 for outliers and 0 for inliers.
         """
-        self.fit(X, sample_weight=sample_weight)
+        self.fit(X)
         return self.predict(X)
 
     def _make_estimator(self) -> IsolationTree:
@@ -350,6 +355,6 @@ class IsolationForest:
             raise ValueError("n_samples_ must be set before creating an estimator.")
         return IsolationTree(
             max_features=self.num_features,
-            n_samples=self.n_samples_,
+            max_samples=self.max_samples,
             random_state=self.random_state,
         )
