@@ -225,9 +225,9 @@ class IsolationForest:
     def __init__(
         self,
         n_trees: int = 100,
-        contamination: float | str = "auto",
+        contamination: float | str = 0.1,
         max_samples: int = 512,
-        random_state: int | RandomState | None = None,
+        random_state: Optional[int | RandomState] = None,
         verbose: bool = False,
         warm_start: bool = False,
     ):
@@ -236,26 +236,30 @@ class IsolationForest:
 
         Args:
             n_trees (int): The number of base trees in the ensemble.
-            contamination (float or 'auto'): The amount of contamination (proportion of outliers in the data set).
+            contamination (float): The amount of contamination (proportion of outliers in the data set).
             max_samples (int): The number of samples to draw from X to train each base estimator.
             random_state (int or RandomState instance): Controls the randomness of the estimator.
             verbose (bool): Enable verbose output.
             warm_start (bool): When set to True, reuse the solution of the previous call to fit and add more estimators to the ensemble.
         """
-        # Initialize attributes based on parameters
+        if n_trees <= 0:
+            raise ValueError("n_trees must be > 0")
         self.n_trees: int = n_trees
-
-        self.contamination: float = (
-            contamination if isinstance(contamination, float) else 0.1
-        )
+        self.comtamination: float = contamination
         self.max_samples: int = max_samples
-        self._n_samples: int | None = None  # to be set during fit
-        self.random_state: int | RandomState = (
-            random_state if random_state is not None else RandomState()
+        # forest-level RNG
+        self._rng: RandomState = (
+            random_state
+            if isinstance(random_state, RandomState)
+            else (
+                RandomState(random_state) if random_state is not None else RandomState()
+            )
         )
         self.verbose: bool = verbose
         self.warm_start: bool = warm_start
         self.estimators_: list[IsolationTree] = []
+        self._n_samples: Optional[int] = None
+        self._num_features: Optional[int] = None
 
     def feature_importances_(self) -> np.ndarray:
         """
