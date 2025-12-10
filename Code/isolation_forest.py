@@ -155,22 +155,26 @@ class IsolationTree:
         self._accumulate_feature_importances(node.left, importances)
         self._accumulate_feature_importances(node.right, importances)
 
-    def fit(self, X) -> None:
+    def fit(self, X: np.ndarray) -> None:
         """
         Fits the IsolationTree to the training data.
 
         Args:
             X (array-like): The input samples.
             sample_weight (array-like, optional): Individual weights for each sample.
-
         """
-        # create root node w/ subsample
-        subsample = np.random.choice(X.shape[0], self.max_samples, replace=False)
-        X = X[subsample]
-        self.n_samples = X.shape[0]
-        self._num_features = X.shape[1]
-        self._root = self._fit_node(X, current_height=0)
-        return None
+        if X.ndim != 2:
+            raise ValueError("X must be 2D array (n_samples, n_features)")
+        # safe subsample
+        sample_size = min(self.max_samples, X.shape[0])
+        if sample_size == X.shape[0]:
+            subsampled_X = X.copy()
+        else:
+            idx = self._rng.choice(X.shape[0], size=sample_size, replace=False)
+            subsampled_X = X[idx]
+        self.n_samples = subsampled_X.shape[0]
+        self._num_features = subsampled_X.shape[1]
+        self._root = self._fit_node(subsampled_X, current_height=0)
 
     def trace_path(
         self, x: np.ndarray, node: Node | None = None, current_height: int = 0
