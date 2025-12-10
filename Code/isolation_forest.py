@@ -50,7 +50,6 @@ class Node:
 class IsolationTree:
     def __init__(
         self,
-        max_features: int,
         max_samples: int = 256,
         random_state: int | RandomState | None = None,
     ):
@@ -58,14 +57,13 @@ class IsolationTree:
         Initializes the IsolationTree.
 
         Args:
-            max_features (int): The number of features to draw from X to train the tree.
             random_state (int or RandomState instance): Controls the randomness of the estimator.
         """
-        self.max_features = max_features
         self.max_samples = max_samples
-        self.max_height = int(np.ceil(np.log2(self.max_samples)))
         self.random_state = random_state
-        self.root_: Node | None = None
+        self.max_height = int(np.ceil(np.log2(self.max_samples)))
+        self._num_features: int | None = None
+        self._root: Node | None = None
         self._set_random_state()
 
     def _set_random_state(self):
@@ -84,6 +82,8 @@ class IsolationTree:
             max_height (int): The maximum height of the tree.
 
         """
+        if self._num_features is None:
+            raise ValueError("Something went wrong. _num_features is not set.")
         if (
             (current_height >= self.max_height)
             or (X.shape[0] <= 1)
@@ -91,7 +91,7 @@ class IsolationTree:
         ):
             return Node(feature=-1, split_value=-1, size=X.shape[0])
         # random feature selection
-        rand_feature = np.random.choice(self.max_features)
+        rand_feature = np.random.choice(self._num_features)
         feature = X[:, rand_feature]
         split_value = np.random.uniform(np.min(feature), np.max(feature))
         node = Node(feature=rand_feature, split_value=split_value, size=X.shape[0])
@@ -109,11 +109,11 @@ class IsolationTree:
         Returns:
             feature_importances (array): The importance of each feature.
         """
-        if self.root_ is None:
+        if self._root is None or self._num_features is None:
             raise ValueError("The tree has not been fitted yet.")
-        importances = np.zeros(self.max_features)
-        node_counts = np.zeros(self.max_features)
-        self._accumulate_feature_importances(self.root_, importances, node_counts)
+        importances = np.zeros(self._num_features)
+        node_counts = np.zeros(self._num_features)
+        self._accumulate_feature_importances(self._root, importances, node_counts)
         # Normalize importances
         importances /= np.sum(node_counts)
         return importances
@@ -151,7 +151,8 @@ class IsolationTree:
         subsample = np.random.choice(X.shape[0], self.max_samples, replace=False)
         X = X[subsample]
         self.n_samples = X.shape[0]
-        self.root_ = self._fit_node(X, current_height=0)
+        self._num_features = X.shape[1]
+        self._root = self._fit_node(X, current_height=0)
         return None
 
     def trace_path(
@@ -169,9 +170,9 @@ class IsolationTree:
             path_length (int): The path length for the sample x.
         """
         if node is None:
-            if self.root_ is None:
+            if self._root is None:
                 raise ValueError("The tree has not been fitted yet.")
-            node = self.root_
+            node = self._root
         if node.is_leaf():
             return current_height
         if x[node.feature] < node.split_value:
@@ -208,7 +209,7 @@ class IsolationForest:
         Args:
             n_trees (int): The number of base trees in the ensemble.
             contamination (float or 'auto'): The amount of contamination (proportion of outliers in the data set).
-            max_features (int): The number of features to draw from X to train each base estimator.
+            max_samples (int): The number of samples to draw from X to train each base estimator.
             random_state (int or RandomState instance): Controls the randomness of the estimator.
             verbose (bool): Enable verbose output.
             warm_start (bool): When set to True, reuse the solution of the previous call to fit and add more estimators to the ensemble.
@@ -220,8 +221,7 @@ class IsolationForest:
             contamination if isinstance(contamination, float) else 0.1
         )
         self.max_samples: int = max_samples
-        self.num_features: int | None = None  # to be set during fit
-        self.n_samples_: int | None = None  # to be set during fit
+        self._n_samples: int | None = None  # to be set during fit
         self.random_state: int | RandomState = (
             random_state if random_state is not None else RandomState()
         )
@@ -236,9 +236,9 @@ class IsolationForest:
         Returns:
             feature_importances (array): The importance of each feature.
         """
-        if not self.estimators_ or self.num_features is None:
+        if not self.estimators_ or self._num_features is None:
             raise ValueError("The model has not been fitted yet.")
-        importances = np.zeros(self.num_features)
+        importances = np.zeros(self._num_features)
         for estimator in self.estimators_:
             importances += estimator.feature_importances_()
         importances /= len(self.estimators_)
@@ -253,8 +253,8 @@ class IsolationForest:
             sample_weight (array-like, optional): Individual weights for each sample.
 
         """
-        self.num_features = X.shape[1]
-        self.n_samples_ = X.shape[0]
+        self._n_samples = X.shape[0]
+        self._num_features = X.shape[1]
         if not self.warm_start or not self.estimators_:
             self.estimators_ = [self._make_estimator() for _ in range(self.n_trees)]
             for estimator in self.estimators_:
@@ -292,15 +292,14 @@ class IsolationForest:
         Returns:
             score (float): The normalized anomaly score for the sample x.
         """
-        if not self.estimators_ or self.n_samples_ is None:
+        if not self.estimators_ or self._n_samples is None:
             raise ValueError("The model has not been fitted yet.")
         # Get average path length across all trees
         avg_path_length = float(
             np.mean([estimator.trace_path(x) for estimator in self.estimators_])
         )
         # Normalize by c(n) and apply exponential formula
-        # Note: We need to store n_samples during fit
-        c_n = self._c(self.n_samples_)
+        c_n = self._c(self._n_samples)
         if c_n == 0:
             return 0.0
         return 2.0 ** (-(avg_path_length / c_n))
@@ -349,12 +348,9 @@ class IsolationForest:
         """
         Helper method to create a single Isolation Tree (base estimator).
         """
-        if self.num_features is None:
-            raise ValueError("num_features must be set before creating an estimator.")
-        if self.n_samples_ is None:
-            raise ValueError("n_samples_ must be set before creating an estimator.")
+        if self._n_samples is None:
+            raise ValueError("Something went wrong. _n_samples is not set.")
         return IsolationTree(
-            max_features=self.num_features,
             max_samples=self.max_samples,
             random_state=self.random_state,
         )
