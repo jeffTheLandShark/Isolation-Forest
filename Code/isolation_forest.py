@@ -346,13 +346,5 @@ class IsolationForest:
         self.fit(X)
         return self.predict(X)
 
-    def _make_estimator(self) -> IsolationTree:
-        """
-        Helper method to create a single Isolation Tree (base estimator).
-        """
-        if self._n_samples is None:
-            raise ValueError("Something went wrong. _n_samples is not set.")
-        return IsolationTree(
-            max_samples=self.max_samples,
-            random_state=self.random_state,
-        )
+    def _make_estimator(self, seed: Optional[int] = None) -> IsolationTree:
+        return IsolationTree(max_samples=self.max_samples, random_state=seed)
