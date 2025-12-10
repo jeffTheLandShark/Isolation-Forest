@@ -51,20 +51,20 @@ class IsolationTree:
     def __init__(
         self,
         max_features: int,
+        n_samples: int,
         random_state: int | RandomState | None = None,
-        max_height: int = 10,
     ):
         """
         Initializes the IsolationTree.
 
         Args:
-            max_samples (int): The number of samples to draw from X to train the tree.
             max_features (int): The number of features to draw from X to train the tree.
             random_state (int or RandomState instance): Controls the randomness of the estimator.
         """
         self.max_features = max_features
-        self.max_height = max_height
+        self.n_samples = n_samples
         self.random_state = random_state
+        self.root_: Node | None = None
         self._set_random_state()
 
     def _set_random_state(self):
@@ -73,7 +73,7 @@ class IsolationTree:
         elif isinstance(self.random_state, RandomState):
             np.random.set_state(self.random_state.get_state())
 
-    def _fit_node(self, X, current_height: int, max_height: int) -> Node:
+    def _fit_node(self, X, current_height: int, max_height: int | None = None) -> Node:
         """
         Recursively fits a node in the IsolationTree.
 
@@ -83,7 +83,8 @@ class IsolationTree:
             max_height (int): The maximum height of the tree.
 
         """
-        if (current_height >= max_height) or (X.shape[0] <= 1) or np.all(X == X[0]):
+        # if (current_height >= max_height) or (X.shape[0] <= 1) or np.all(X == X[0]):
+        if (X.shape[0] <= 1) or np.all(X == X[0]):
             return Node(feature=-1, split_value=-1, size=X.shape[0])
         # random feature selection
         rand_feature = np.random.choice(self.max_features)
@@ -143,7 +144,7 @@ class IsolationTree:
 
         """
         # create root node w/ subsample
-        self.root_ = self._fit_node(X, current_height=0, max_height=self.max_height)
+        self.root_ = self._fit_node(X, current_height=0)
         return None
 
     def trace_path(
@@ -211,7 +212,7 @@ class IsolationForest:
             contamination if isinstance(contamination, float) else 0.1
         )
         self.num_features: int | None = None  # to be set during fit
-        self.bootstrap: bool = bootstrap
+        self.n_samples_: int | None = None  # to be set during fit
         self.random_state: int | RandomState = (
             random_state if random_state is not None else RandomState()
         )
@@ -261,6 +262,7 @@ class IsolationForest:
 
         """
         self.num_features = X.shape[1]
+        self.n_samples_ = X.shape[0]
         if not self.warm_start or not self.estimators_:
             self.estimators_ = [self._make_estimator() for _ in range(self.n_trees)]
             for estimator in self.estimators_:
@@ -271,28 +273,55 @@ class IsolationForest:
                 estimator.fit(X, sample_weight=sample_weight)
             self.estimators_.extend(new_estimators)
 
+    def _c(self, n: int) -> float:
+        """
+        Computes c(n): the average path length of unsuccessful searches in a binary search tree.
+        Used for normalizing anomaly scores.
+
+        Args:
+            n (int): Number of samples in the dataset.
+
+        Returns:
+            float: The normalization constant.
+        """
+        if n <= 1:
+            return 0.0
+        return 2.0 * (np.log(n - 1) + 0.5772156649) - 2.0 * (n - 1) / n
+
     def _anomaly_score(self, x: np.ndarray) -> float:
         """
-        Computes the anomaly score for a single sample x.
+        Computes the normalized anomaly score for a single sample x.
+
+        The formula is: s(x, n) = 2^(-E(h(x)) / c(n))
+        where E(h(x)) is the average path length and c(n) is the normalization constant.
 
         Args:
             x (array-like): The input sample.
         Returns:
-            score (float): The anomaly score for the sample x.
+            score (float): The normalized anomaly score for the sample x.
         """
-        return float(
+        if not self.estimators_ or self.n_samples_ is None:
+            raise ValueError("The model has not been fitted yet.")
+        # Get average path length across all trees
+        avg_path_length = float(
             np.mean([estimator.trace_path(x) for estimator in self.estimators_])
         )
+        # Normalize by c(n) and apply exponential formula
+        # Note: We need to store n_samples during fit
+        c_n = self._c(self.n_samples_)
+        if c_n == 0:
+            return 0.0
+        return 2.0 ** (-(avg_path_length / c_n))
 
     def decision_function(self, X) -> np.ndarray:
         """
-        Average anomaly score of X of the base classifiers.
+        Anomaly scores for X using the normalized isolation forest formula.
 
         Parameters:
             X (array-like): The input samples.
 
         Returns:
-            scores (array): The anomaly scores for each sample.
+            scores (array): The normalized anomaly scores for each sample.
         """
         return np.array([self._anomaly_score(x) for x in X])
 
@@ -307,8 +336,8 @@ class IsolationForest:
             predictions (array): Array of 1 for outliers and 0 for inliers.
         """
         scores = self.decision_function(X)
-        threshold = np.percentile(scores, 100 * self.contamination)
-        return np.where(scores >= threshold, 0, 1)
+        threshold = np.percentile(scores, (100 * (1 - self.contamination)))
+        return np.where(scores >= threshold, 1, 0)
 
     def fit_predict(self, X, sample_weight=None) -> np.ndarray:
         """
@@ -330,7 +359,10 @@ class IsolationForest:
         """
         if self.num_features is None:
             raise ValueError("num_features must be set before creating an estimator.")
+        if self.n_samples_ is None:
+            raise ValueError("n_samples_ must be set before creating an estimator.")
         return IsolationTree(
             max_features=self.num_features,
+            n_samples=self.n_samples_,
             random_state=self.random_state,
         )
