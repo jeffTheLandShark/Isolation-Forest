@@ -117,7 +117,7 @@ class IsolationTree:
         node.right = self._fit_node(right_X, current_height + 1)
         return node
 
-    def feature_importances_(self) -> np.ndarray:
+    def _feature_importances(self) -> np.ndarray:
         """
         Computes feature importances based on the path lengths in the tree.
 
@@ -208,7 +208,7 @@ class IsolationTree:
         else:
             return self.trace_path(x, node.right, current_height + 1)
 
-    def path_length(self, X) -> np.ndarray:
+    def path_length(self, X: np.ndarray) -> np.ndarray:
         """
         Computes the path length for each sample in X.
 
@@ -225,11 +225,10 @@ class IsolationForest:
     def __init__(
         self,
         n_trees: int = 100,
-        contamination: float | str = 0.1,
+        contamination: float = 0.1,
         max_samples: int = 512,
         random_state: Optional[int | RandomState] = None,
         verbose: bool = False,
-        warm_start: bool = False,
     ):
         """
         Initializes the IsolationForest model.
@@ -240,7 +239,6 @@ class IsolationForest:
             max_samples (int): The number of samples to draw from X to train each base estimator.
             random_state (int or RandomState instance): Controls the randomness of the estimator.
             verbose (bool): Enable verbose output.
-            warm_start (bool): When set to True, reuse the solution of the previous call to fit and add more estimators to the ensemble.
         """
         if n_trees <= 0:
             raise ValueError("n_trees must be > 0")
@@ -256,8 +254,7 @@ class IsolationForest:
             )
         )
         self.verbose: bool = verbose
-        self.warm_start: bool = warm_start
-        self.estimators_: list[IsolationTree] = []
+        self._estimators: list[IsolationTree] = []
         self._n_samples: Optional[int] = None
         self._num_features: Optional[int] = None
 
@@ -268,15 +265,14 @@ class IsolationForest:
         Returns:
             feature_importances (array): The importance of each feature.
         """
-        if not self.estimators_ or self._num_features is None:
+        if not self._estimators or self._num_features is None:
             raise ValueError("The model has not been fitted yet.")
         importances = np.zeros(self._num_features, dtype=float)
-        for estimator in self.estimators_:
-            importances += estimator.feature_importances_()
-        return importances / len(self.estimators_)
+        for estimator in self._estimators:
+            importances += estimator._feature_importances()
+        return importances / len(self._estimators)
 
-
-    def fit(self, X):
+    def fit(self, X: np.ndarray):
         """
         Fits the IsolationForest model to the training data.
 
@@ -285,32 +281,20 @@ class IsolationForest:
             sample_weight (array-like, optional): Individual weights for each sample.
 
         """
+        if X.ndim != 2:
+            raise ValueError("X must be 2D")
         self._n_samples = X.shape[0]
         self._num_features = X.shape[1]
-        if not self.warm_start or not self.estimators_:
-            self.estimators_ = [self._make_estimator() for _ in range(self.n_trees)]
-            for estimator in self.estimators_:
-                estimator.fit(X)
-        else:
-            new_estimators = [self._make_estimator() for _ in range(self.n_trees)]
-            for estimator in new_estimators:
-                estimator.fit(X)
-            self.estimators_.extend(new_estimators)
 
-    def _c(self, n: int) -> float:
-        """
-        Computes c(n): the average path length of unsuccessful searches in a binary search tree.
-        Used for normalizing anomaly scores.
+        new_estimators: list[IsolationTree] = []
+        for _ in range(self.n_trees):
+            # derive a seed per-tree so trees are independent but reproducible
+            seed = int(self._rng.randint(0, 2**31 - 1))
+            tree = self._make_estimator(seed=seed)
+            tree.fit(X)
+            new_estimators.append(tree)
 
-        Args:
-            n (int): Number of samples in the dataset.
-
-        Returns:
-            float: The normalization constant.
-        """
-        if n <= 1:
-            return 0.0
-        return 2.0 * (np.log(n - 1) + 0.5772156649) - 2.0 * (n - 1) / n
+        self._estimators = new_estimators
 
     def _anomaly_score(self, X: np.ndarray) -> np.ndarray:
         """Computes the anomaly score for each sample in X.
