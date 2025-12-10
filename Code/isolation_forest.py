@@ -1,5 +1,18 @@
 from numpy.random import RandomState
 import numpy as np
+from typing import Optional
+
+
+EPSILON = 1e-12
+HARMONIC_CONST = 0.5772156649  # Euler-Mascheroni constant
+
+
+def c_(n: int) -> float:
+    """Expected path length c(n) for isolation trees (Liu et al., 2008)."""
+    if n <= 1:
+        return 0.0
+    # Using approximation with harmonic number: H_{n-1} ≈ ln(n-1) + gamma + 1/(2(n-1)) ...
+    return 2.0 * (np.log(n - 1) + HARMONIC_CONST) - 2.0 * (n - 1) / n
 
 
 class Node:
