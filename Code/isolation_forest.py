@@ -318,19 +318,7 @@ class IsolationForest:
             c_n = EPSILON
         return 2.0 ** (-(avg_paths / c_n))
 
-    def decision_function(self, X) -> np.ndarray:
-        """
-        Anomaly scores for X using the normalized isolation forest formula.
-
-        Parameters:
-            X (array-like): The input samples.
-
-        Returns:
-            scores (array): The normalized anomaly scores for each sample.
-        """
-        return np.array([self._anomaly_score(x) for x in X])
-
-    def predict(self, X) -> np.ndarray:
+    def predict(self, X: np.ndarray) -> np.ndarray:
         """
         Predicts if a particular sample is an outlier or not.
 
@@ -340,8 +328,8 @@ class IsolationForest:
         Returns:
             predictions (array): Array of 1 for outliers and 0 for inliers.
         """
-        scores = self.decision_function(X)
-        threshold = np.percentile(scores, (100 * (1 - self.contamination)))
+        scores = self._anomaly_score(X)
+        threshold = np.percentile(scores, 100.0 * (1.0 - self.comtamination))
         return np.where(scores >= threshold, 1, 0)
 
     def fit_predict(self, X) -> np.ndarray:
