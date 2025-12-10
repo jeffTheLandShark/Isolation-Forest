@@ -63,6 +63,7 @@ class IsolationTree:
         """
         self.max_features = max_features
         self.n_samples = n_samples
+        self.max_height = int(np.ceil(np.log2(self.n_samples)))
         self.random_state = random_state
         self.root_: Node | None = None
         self._set_random_state()
@@ -73,7 +74,7 @@ class IsolationTree:
         elif isinstance(self.random_state, RandomState):
             np.random.set_state(self.random_state.get_state())
 
-    def _fit_node(self, X, current_height: int, max_height: int | None = None) -> Node:
+    def _fit_node(self, X, current_height: int) -> Node:
         """
         Recursively fits a node in the IsolationTree.
 
@@ -83,8 +84,11 @@ class IsolationTree:
             max_height (int): The maximum height of the tree.
 
         """
-        # if (current_height >= max_height) or (X.shape[0] <= 1) or np.all(X == X[0]):
-        if (X.shape[0] <= 1) or np.all(X == X[0]):
+        if (
+            (current_height >= self.max_height)
+            or (X.shape[0] <= 1)
+            or np.all(X == X[0])
+        ):
             return Node(feature=-1, split_value=-1, size=X.shape[0])
         # random feature selection
         rand_feature = np.random.choice(self.max_features)
@@ -94,8 +98,8 @@ class IsolationTree:
         # data partitioning
         left_partition, right_partition = node.partition(X)
         # recursion
-        node.left = self._fit_node(left_partition, current_height + 1, max_height)
-        node.right = self._fit_node(right_partition, current_height + 1, max_height)
+        node.left = self._fit_node(left_partition, current_height + 1)
+        node.right = self._fit_node(right_partition, current_height + 1)
         return node
 
     def feature_importances_(self) -> np.ndarray:
@@ -219,23 +223,6 @@ class IsolationForest:
         self.verbose: bool = verbose
         self.warm_start: bool = warm_start
         self.estimators_: list[IsolationTree] = []
-
-    def shortcut_feature_importances_(self, X: np.ndarray) -> np.ndarray:
-        """
-        Computes feature importances based on the average path lengths across all trees.
-
-        Returns:
-            feature_importances (array): The importance of each feature.
-        """
-        if not self.estimators_ or self.num_features is None:
-            raise ValueError("The model has not been fitted yet.")
-        importances = np.zeros(self.num_features)
-        for estimator in self.estimators_:
-            importances += (
-                estimator.feature_importances_() / estimator.path_length(X).mean()
-            )
-        importances /= len(self.estimators_)
-        return importances
 
     def feature_importances_(self) -> np.ndarray:
         """
