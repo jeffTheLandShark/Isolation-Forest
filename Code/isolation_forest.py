@@ -126,15 +126,13 @@ class IsolationTree:
         """
         if self._root is None or self._num_features is None:
             raise ValueError("The tree has not been fitted yet.")
-        importances = np.zeros(self._num_features)
-        node_counts = np.zeros(self._num_features)
-        self._accumulate_feature_importances(self._root, importances, node_counts)
-        # Normalize importances
-        importances /= np.sum(node_counts)
-        return importances
+        importances = np.zeros(self._num_features, dtype=float)
+        self._accumulate_feature_importances(self._root, importances)
+        s = importances.sum()
+        return importances if s == 0 else importances / s
 
     def _accumulate_feature_importances(
-        self, node: Node, importances: np.ndarray, node_counts: np.ndarray
+        self, node: Node, importances: np.ndarray
     ) -> None:
         """
         Helper method to accumulate feature importances from a single tree.
@@ -142,16 +140,20 @@ class IsolationTree:
         Args:
             node (Node): The current node in the tree.
             importances (array): The array to accumulate importances.
-            node_counts (array): The array to count occurrences of features.
         """
-        if node.is_leaf() or (node.left is None or node.right is None):
+        if node is None or node.is_leaf() or node.left is None or node.right is None:
             return
-        # mini = max(1, min(node.left.size, node.right.size))
-        mini = 1
-        importances[node.feature] += 1 / mini
-        node_counts[node.feature] += 1
-        self._accumulate_feature_importances(node.left, importances, node_counts)
-        self._accumulate_feature_importances(node.right, importances, node_counts)
+        n = node.size
+        nL = node.left.size
+        nR = node.right.size
+        # compute expected path-length reduction at this split
+        parent_c = c_(n)
+        child_c = (nL / n) * c_(nL) + (nR / n) * c_(nR)
+        gain = parent_c - child_c
+        if gain > 0 and 0 <= node.feature < importances.size:
+            importances[node.feature] += gain
+        self._accumulate_feature_importances(node.left, importances)
+        self._accumulate_feature_importances(node.right, importances)
 
     def fit(self, X) -> None:
         """
@@ -260,11 +262,11 @@ class IsolationForest:
         """
         if not self.estimators_ or self._num_features is None:
             raise ValueError("The model has not been fitted yet.")
-        importances = np.zeros(self._num_features)
+        importances = np.zeros(self._num_features, dtype=float)
         for estimator in self.estimators_:
             importances += estimator.feature_importances_()
-        importances /= len(self.estimators_)
-        return importances
+        return importances / len(self.estimators_)
+
 
     def fit(self, X):
         """
