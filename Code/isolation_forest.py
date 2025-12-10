@@ -190,6 +190,13 @@ class IsolationTree:
             node = self._root
         if node.is_leaf():
             return current_height
+        if (
+            node.feature < 0
+            or node.feature >= x.shape[0]
+            and x.ndim == 1
+            and x.size != 0
+        ):
+            raise ValueError("Invalid feature index during path tracing")
         if x[node.feature] < node.split_value:
             return self.trace_path(x, node.left, current_height + 1)
         else:
