@@ -233,6 +233,7 @@ class IsolationForestComparison:
         # ROC AUC
         custom_scores = self.custom_model.decision_function(self.X_test)
         sklearn_scores = self.sklearn_model.decision_function(self.X_test)
+        sklearn_scores = -1 * sklearn_scores  # Invert for consistency
 
         # Normalize scores to [0, 1] for ROC AUC
         custom_scores_norm = (custom_scores - np.min(custom_scores)) / (
