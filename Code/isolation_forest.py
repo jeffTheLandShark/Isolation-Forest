@@ -148,7 +148,7 @@ class IsolationTree:
         nR = node.right.size
         # compute expected path-length reduction at this split
         parent_c = c_(n)
-        child_c = (nL / n) * c_(nL) + (nR / n) * c_(nR)
+        child_c = (nL * c_(nL) + nR * c_(nR)) / n
         gain = parent_c - child_c
         if gain > 0 and 0 <= node.feature < importances.size:
             importances[node.feature] += gain
@@ -224,7 +224,7 @@ class IsolationTree:
 class IsolationForest:
     def __init__(
         self,
-        n_trees: int = 100,
+        n_trees: int = 500,
         contamination: float = 0.1,
         max_samples: int = 512,
         random_state: Optional[int | RandomState] = None,
@@ -296,8 +296,8 @@ class IsolationForest:
 
         self._estimators = new_estimators
 
-    def _anomaly_score(self, X: np.ndarray) -> np.ndarray:
-        """Computes the anomaly score for each sample in X.
+    def decision_function(self, X: np.ndarray) -> np.ndarray:
+        """Average anomaly score for each sample in X across all trees.
 
         The formula is: s(x, n) = 2^(-E(h(x)) / c(n))
         where E(h(x)) is the average path length and c(n) is the normalization constant.
@@ -328,7 +328,7 @@ class IsolationForest:
         Returns:
             predictions (array): Array of 1 for outliers and 0 for inliers.
         """
-        scores = self._anomaly_score(X)
+        scores = self.decision_function(X)
         threshold = np.percentile(scores, 100.0 * (1.0 - self.comtamination))
         return np.where(scores >= threshold, 1, 0)
 
